@@ -235,20 +235,33 @@ public class AdaptiveClassCodeGenerator {
                 code.append(generateUrlAssignmentIndirectly(method));
             }
 
+            //获取Adaptive的注解值
             String[] value = getMethodAdaptiveValue(adaptiveAnnotation);
 
             boolean hasInvocation = hasInvocationArgument(method);
             
             code.append(generateInvocationArgumentNullCheck(method));
-            
+            //生成拓展名获取逻辑
             code.append(generateExtNameAssignment(value, hasInvocation));
             // check extName == null?
             code.append(generateExtNameNullCheck(value));
-            
+            //生成拓展加载与目标方法调用逻辑
+            // 生成拓展获取代码，格式如下：
+            // type全限定名 extension = (type全限定名)ExtensionLoader全限定名
+            //     .getExtensionLoader(type全限定名.class).getExtension(extName);
+            // Tips: 格式化字符串中的 %<s 表示使用前一个转换符所描述的参数，即 type 全限定名
             code.append(generateExtensionAssignment());
 
             // return statement
+            // 生成目标方法调用逻辑，格式为：
+            //     extension.方法名(arg0, arg2, ..., argN);
             code.append(generateReturnAndInovation(method));
+
+           // 以 Protocol 接口举例说明，上面代码生成的内容如下：
+
+         //   com.alibaba.dubbo.rpc.Protocol extension = (com.alibaba.dubbo.rpc.Protocol) ExtensionLoader
+        //            .getExtensionLoader(com.alibaba.dubbo.rpc.Protocol.class).getExtension(extName);
+         //   return extension.refer(arg0, arg1);
         }
         
         return code.toString();
@@ -269,21 +282,38 @@ public class AdaptiveClassCodeGenerator {
         String getNameCode = null;
         for (int i = value.length - 1; i >= 0; --i) {
             if (i == value.length - 1) {
+                //如果默认拓展名不为空 defaultExtName为dubbo, Protocol接口默认SPI为dubbo,这里就是接口 @SPI注解的值
                 if (null != defaultExtName) {
+                    // protocol 是 url 的一部分，可通过 getProtocol 方法获取，其他的则是从
+                    // URL 参数中获取。因为获取方式不同，所以这里要判断 value[i] 是否为 protocol
                     if (!"protocol".equals(value[i])) {
+                        // hasInvocation 用于标识方法参数列表中是否有 Invocation 类型参数
                         if (hasInvocation) {
+                            // 生成的代码功能等价于下面的代码：
+                            //   url.getMethodParameter(methodName, value[i], defaultExtName)
+                            // 以 LoadBalance 接口的 select 方法为例，最终生成的代码如下：
+                            //   url.getMethodParameter(methodName, "loadbalance", "random")
                             getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
                         } else {
+                            // 生成的代码功能等价于下面的代码：
+                            //   url.getParameter(value[i], defaultExtName)
                             getNameCode = String.format("url.getParameter(\"%s\", \"%s\")", value[i], defaultExtName);
                         }
                     } else {
+                        // 生成的代码功能等价于下面的代码：
+                        //   ( url.getProtocol() == null ? defaultExtName : url.getProtocol() )
                         getNameCode = String.format("( url.getProtocol() == null ? \"%s\" : url.getProtocol() )", defaultExtName);
                     }
+                // 如果默认拓展名为空
                 } else {
                     if (!"protocol".equals(value[i])) {
                         if (hasInvocation) {
                             getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
                         } else {
+                            // 生成的代码功能等价于下面的代码：
+                            //   url.getParameter(value[i], getNameCode)
+                            // 以 Transporter 接口的 connect 方法为例，最终生成的代码如下：
+                            //   url.getParameter("client", url.getParameter("transporter", "netty"))
                             getNameCode = String.format("url.getParameter(\"%s\")", value[i]);
                         }
                     } else {
@@ -344,11 +374,20 @@ public class AdaptiveClassCodeGenerator {
 
     /**
      * get value of adaptive annotation or if empty return splitted simple name
+     * Adaptive 注解值 value 类型为 String[]，可填写多个值，默认情况下为空数组。
+     * 若 value 为非空数组，直接获取数组内容即可。
+     * 若 value 为空数组，则需进行额外处理。
+     * 处理过程是将类名转换为字符数组，然后遍历字符数组，并将字符放入 StringBuilder 中。
+     * 若字符为大写字母，则向 StringBuilder 中添加点号，随后将字符变为小写存入 StringBuilder 中。
+     * 比如 LoadBalance 经过处理后，得到 load.balance
      */
     private String[] getMethodAdaptiveValue(Adaptive adaptiveAnnotation) {
         String[] value = adaptiveAnnotation.value();
         // value is not set, use the value generated from class name as the key
         if (value.length == 0) {
+            //type.getSimpleName()：Protocol 不是全路径org.apache.dubbo.rpc.Protocol
+            //StringUtils.camelToSplitName是把驼峰标识的转换为用.分割
+
             String splitName = StringUtils.camelToSplitName(type.getSimpleName(), ".");
             value = new String[]{splitName};
         }
