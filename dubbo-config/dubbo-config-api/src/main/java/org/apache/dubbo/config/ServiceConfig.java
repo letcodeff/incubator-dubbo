@@ -322,8 +322,9 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
     }
 
     public synchronized void export() {
+        //进行一些check
         checkAndUpdateSubConfigs();
-
+// 当 export 或者 delay 未配置，从 ProviderConfig 对象读取。
         if (provider != null) {
             if (export == null) {
                 export = provider.getExport();
@@ -332,13 +333,15 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                 delay = provider.getDelay();
             }
         }
+        // 不暴露服务( export = false ) ，则不进行暴露服务逻辑。
         if (export != null && !export) {
             return;
         }
-
+// 延迟暴露
         if (delay != null && delay > 0) {
             delayExportExecutor.schedule(this::doExport, delay, TimeUnit.MILLISECONDS);
         } else {
+            // 立即暴露
             doExport();
         }
     }
