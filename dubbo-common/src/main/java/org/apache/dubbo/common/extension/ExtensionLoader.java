@@ -118,7 +118,7 @@ public class ExtensionLoader<T> {
     private String cachedDefaultName;
     private volatile Throwable createAdaptiveInstanceError;
 
-    //目标实现类有
+    //某个接口的所有装饰器实例，对想获得的实例进行装饰后的实例
     private Set<Class<?>> cachedWrapperClasses;
     //拓展实例
     private Map<String, IllegalStateException> exceptions = new ConcurrentHashMap<>();
@@ -595,11 +595,13 @@ public class ExtensionLoader<T> {
      * Dubbo IOC 是通过 setter 方法注入依赖。
      * Dubbo 首先会通过反射获取到实例的所有方法，然后再遍历方法列表，检测方法名是否具有 setter 方法特征。
      * 若有，则通过 ObjectFactory 获取依赖对象，最后通过反射调用 setter 方法将依赖设置到目标对象中
+     * 插入该扩展需要其他扩展或bean
      * @param instance
      * @return
      */
     private T injectExtension(T instance) {
         try {
+            //objectFactory也是一个扩展点，在new ExtensionLoader的时候创建
             if (objectFactory != null) {
                 // 遍历目标类的所有方法
                 for (Method method : instance.getClass().getMethods()) {
@@ -612,22 +614,25 @@ public class ExtensionLoader<T> {
                             continue;
                         }
                         // 获取 setter 方法参数类型
-                        Class<?> pt = method.getParameterTypes()[0];
+                        Class<?> pt = method.getParameterTypes()[0]; //参数param的类型T,eg.String
                         if (ReflectUtils.isPrimitives(pt)) {
                             continue;
                         }
                         try {
+                            //get properties name for setter, for instance: setVersion, return "version"
                             // 获取属性名，比如 setName 方法对应属性名 name
                             String property = getSetterProperty(method);
                             // 从 ObjectFactory 中获取依赖对象
                             //objectFactory 变量的类型为 AdaptiveExtensionFactory
                             //AdaptiveExtensionFactory 内部维护了一个 ExtensionFactory 列表，用于存储其他类型的 ExtensionFactory
                            // Dubbo 目前提供了两种 ExtensionFactory，分别是 SpiExtensionFactory 和 SpringExtensionFactory。
-                            // 前者用于创建自适应的拓展，后者是用于从 Spring 的 IOC 容器中获取所需的拓展
-                            Object object = objectFactory.getExtension(pt, property);
+                            // 前者用于创建自适应的拓展，后者是用于从 Spring 的 IOC 容器中获取所需的拓展，AdaptiveExtensionFactory轮询这2个，从一个中获取到就返回。
+                            //objectFactory获取扩展点或bean注入到当前扩展点
+                            Object object = objectFactory.getExtension(pt, property); //实例化参数
                             if (object != null) {
                                 // 通过反射调用 setter 方法设置依赖
                                 //把依赖对象set到instance中
+                                //执行instance.method(object)方法,这里就是执行instance的setter方法,进行setter注入
                                 method.invoke(instance, object);
                             }
                         } catch (Exception e) {
@@ -660,8 +665,10 @@ public class ExtensionLoader<T> {
      * 2, name starts with "set"
      * <p>
      * 3, only has one parameter
+     * 一个参数的public的setXXX(T param)方法.例如,setName(String name)
      */
     private boolean isSetter(Method method) {
+        // setting && public 方法
         return method.getName().startsWith("set")
                 && method.getParameterTypes().length == 1
                 && Modifier.isPublic(method.getModifiers());
