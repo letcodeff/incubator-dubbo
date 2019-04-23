@@ -85,6 +85,7 @@ public class ExtensionLoader<T> {
     例如，Protocol 和 Filter 分别对应一个 ExtensionLoader 对象*/
     private static final ConcurrentMap<Class<?>, ExtensionLoader<?>> EXTENSION_LOADERS = new ConcurrentHashMap<>();
 
+    //以Protocol举例：放着Protocol接口所有的拓展类的实例
     private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<>();
 
     // ==============================
@@ -107,6 +108,9 @@ public class ExtensionLoader<T> {
     private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<>();
     //存储 name 到 Activate 注解对象的映射关系
    //存放放有Activate注解的name  key-name value-Activate注解  比如name为dubbo
+    //拓展名与 @Activate 的映射
+    //例如，AccessLogFilter。
+    //用于 {@link #getActivateExtension(URL, String)}
     private final Map<String, Object> cachedActivates = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<String, Holder<Object>> cachedInstances = new ConcurrentHashMap<>();
@@ -206,7 +210,7 @@ public class ExtensionLoader<T> {
 
     /**
      * This is equivalent to {@code getActivateExtension(url, url.getParameter(key).split(","), null)}
-     *
+     * 获得符合自动激活条件的拓展对象数组
      * @param url   url
      * @param key   url parameter key which used to get extension point names
      * @param group group
@@ -229,11 +233,16 @@ public class ExtensionLoader<T> {
      */
     public List<T> getActivateExtension(URL url, String[] values, String group) {
         List<T> exts = new ArrayList<>();
+        //将传递过来的values包装成List类型的names
         List<String> names = values == null ? new ArrayList<>(0) : Arrays.asList(values);
+        //包装好的数据中不包含"-default"
         if (!names.contains(Constants.REMOVE_VALUE_PREFIX + Constants.DEFAULT_KEY)) {
+           // 获取这个接口的所有扩展信息
             getExtensionClasses();
             for (Map.Entry<String, Object> entry : cachedActivates.entrySet()) {
+                //获取扩展的名称
                 String name = entry.getKey();
+                //获取扩展的注解
                 Object activate = entry.getValue();
 
                 String[] activateGroup, activateValue;
@@ -247,17 +256,33 @@ public class ExtensionLoader<T> {
                 } else {
                     continue;
                 }
+
                 if (isMatchGroup(group, activateGroup)) {
+                    //group 校验通过了，从缓存中获取此name对应的实例
                     T ext = getExtension(name);
+                   // names 不包含 遍历此时的name
                     if (!names.contains(name)
+                            //names中不包含"-default"
                             && !names.contains(Constants.REMOVE_VALUE_PREFIX + name)
+                            //通过URL判断这个activate注解是激活的
                             && isActive(activateValue, url)) {
+                        //增加扩展
                         exts.add(ext);
                     }
                 }
             }
+            //按照Activate的方式进行排序，注意order
             exts.sort(ActivateComparator.COMPARATOR);
         }
+        /**
+         * 借用usrs这个临时变量，进行循环往exts中塞具体的ext的对象。
+         * 如果碰到了"default"就添加到头部，清空usrs这个临时变量。
+         * 如果没有"default"那么usrs不会清空，所以下面有个if，说usrs不为空
+         * 将里面的内容增加到exts中
+         * 有两种情况会从以下代码中加载filter
+         *    1.如果在配置文件中配置了自定义的filter,并且filter类上没有添加@Active注解
+         *    2.配置文件中配置了dubbo提供的filter
+         */
         List<T> usrs = new ArrayList<>();
         for (int i = 0; i < names.size(); i++) {
             String name = names.get(i);
@@ -279,7 +304,14 @@ public class ExtensionLoader<T> {
         }
         return exts;
     }
-
+    /**
+     * 判断group是否属于范围
+     *
+     * 1. 如果activate注解的group没有设定，直接返回true
+     * 2. 如果设定了，需要和传入的group进行比较，看是否
+     * 包含其中，如果包含，返回true
+     *
+     */
     private boolean isMatchGroup(String group, String[] groups) {
         if (StringUtils.isEmpty(group)) {
             return true;
