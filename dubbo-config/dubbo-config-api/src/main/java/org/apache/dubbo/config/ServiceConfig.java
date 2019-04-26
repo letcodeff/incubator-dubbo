@@ -544,6 +544,11 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                             registryURL = registryURL.addParameter(Constants.PROXY_KEY, proxy);
                         }
 
+                        //解析registryURL.addParameterAndEncoded(Constants.EXPORT_KEY, url.toFullString()
+                        //registryURL为registry://127.0.0.1:1234/org.apache.dubbo.registry.RegistryService?application=demo-provider...
+                        //registryURL中加入参数 ?export=dubbo://192.168.1.101:20880/...
+                        // key为export value为 dubbo://192.168.1.101:20880/org.apache.dubbo.demo.DemoService?anyhost=true&application=demo-provider&bean.name=org.apache.dubbo.demo.DemoService&bind.ip=192.168.1.101&bind.port=20880&connections=100&default.deprecated=false&default.dynamic=false&default.export=true&default.register=true&deprecated=false&dubbo=2.0.2&dynamic=false&export=true&generic=false&interface=org.apache.dubbo.demo.DemoService&methods=sayHello&pid=19316&qos.port=22222&register=true&release=&side=provider&timeout=5000&timestamp=1556033226047
+                        //加完后为：registry://127.0.0.1:1234/org.apache.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F192.168.1.101%3A20880%2Forg.apache.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider%26bean.name%3Dorg.apache.dubbo.demo.DemoService%26bind.ip%3D192.168.1.101%26bind.port%3D20880%26connections%3D100%26default.deprecated%3Dfalse%26default.dynamic%3Dfalse%26default.export%3Dtrue%26default.register%3Dtrue%26deprecated%3Dfalse%26dubbo%3D2.0.2%26dynamic%3Dfalse%26export%3Dtrue%26generic%3Dfalse%26interface%3Dorg.apache.dubbo.demo.DemoService%26methods%3DsayHello%26pid%3D6680%26qos.port%3D22222%26register%3Dtrue%26release%3D%26side%3Dprovider%26timeout%3D5000%26timestamp%3D1556032988609&group=demo&pid=6680&qos.port=22222&registry=multicast&timestamp=1556032987082
                         Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(Constants.EXPORT_KEY, url.toFullString()));
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
