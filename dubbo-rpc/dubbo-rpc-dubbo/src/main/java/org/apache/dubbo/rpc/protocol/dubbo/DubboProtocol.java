@@ -269,6 +269,7 @@ public class DubboProtocol extends AbstractProtocol {
         exporterMap.put(key, exporter);
 
         //export an stub service for dispatching event
+        //服务接口客户端本地代理
         Boolean isStubSupportEvent = url.getParameter(Constants.STUB_EVENT_KEY, Constants.DEFAULT_STUB_EVENT);
         Boolean isCallbackservice = url.getParameter(Constants.IS_CALLBACK_SERVICE, false);
         if (isStubSupportEvent && !isCallbackservice) {
@@ -313,23 +314,29 @@ public class DubboProtocol extends AbstractProtocol {
 
     private ExchangeServer createServer(URL url) {
         // send readonly event when server closes, it's enabled by default
+        //为服务提供者url增加channel.readonly.sent属性，默认为true，表示在发送请求时，是否等待将字节写入socket后再返回，默认为true。
         url = url.addParameterIfAbsent(Constants.CHANNEL_READONLYEVENT_SENT_KEY, Boolean.TRUE.toString());
         // enable heartbeat by default
+        //为服务提供者url增加heartbeat属性，表示心跳间隔时间，默认为60*1000，表示60s
         url = url.addParameterIfAbsent(Constants.HEARTBEAT_KEY, String.valueOf(Constants.DEFAULT_HEARTBEAT));
+       // 为服务提供者url增加server属性，可选值为netty,mina等等，默认为netty。
         String str = url.getParameter(Constants.SERVER_KEY, Constants.DEFAULT_REMOTING_SERVER);
 
+        //根据SPI机制，判断server属性是否支持
         if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
             throw new RpcException("Unsupported server type: " + str + ", url: " + url);
         }
-
+        //为服务提供者url增加codec属性，默认值为dubbo，协议编码方式
         url = url.addParameter(Constants.CODEC_KEY, DubboCodec.NAME);
         ExchangeServer server;
         try {
+            //根据服务提供者URI,服务提供者命令请求处理器requestHandler构建ExchangeServer实例
+            //requestHandler的实现具体在以后详细分析Dubbo服务调用时再详细分析
             server = Exchangers.bind(url, requestHandler);
         } catch (RemotingException e) {
             throw new RpcException("Fail to start server(url: " + url + ") " + e.getMessage(), e);
         }
-
+        //验证客户端类型是否可用
         str = url.getParameter(Constants.CLIENT_KEY);
         if (str != null && str.length() > 0) {
             Set<String> supportedTypes = ExtensionLoader.getExtensionLoader(Transporter.class).getSupportedExtensions();

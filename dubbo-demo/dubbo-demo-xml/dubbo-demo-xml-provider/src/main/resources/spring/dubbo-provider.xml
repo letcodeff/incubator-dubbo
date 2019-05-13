@@ -17,25 +17,29 @@
   -->
 <beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns:dubbo="http://dubbo.apache.org/schema/dubbo"
-       xmlns="http://www.springframework.org/schema/beans"
+       xmlns="http://www.springframework.org/schema/beans" xmlns:rest="http://code.alibabatech.com/schema/dubbo"
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
-       http://dubbo.apache.org/schema/dubbo http://dubbo.apache.org/schema/dubbo/dubbo.xsd">
+       http://dubbo.apache.org/schema/dubbo http://dubbo.apache.org/schema/dubbo/dubbo.xsd http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
 
     <!-- provider's application name, used for tracing dependency relationship -->
     <dubbo:application name="demo-provider"/>
 
+
+    <dubbo:registry group="demo" address="zookeeper://127.0.0.1:2181" />
     <!--
     <dubbo:registry group="demo" address="zookeeper://10.100.51.116:2181" />
-    -->
-    <dubbo:registry group="demo" address="multicast://127.0.0.1:1234" />
-
+    <dubbo:registry group="demo" address="zookeeper://127.0.0.1:2181" />
+   <dubbo:registry group="demo" address="multicast://127.0.0.1:1234" />
+-->
     <!-- use dubbo protocol to export service on port 20880 -->
     <dubbo:protocol name="dubbo"/>
-
-    <!-- service implementation, as same as regular local bean -->
+    <!--  <dubbo:protocol name="rest"/> -->
+     <!-- service implementation, as same as regular local bean -->
     <bean id="demoService" class="org.apache.dubbo.demo.provider.DemoServiceImpl"/>
+    <bean id="myDemoService" class="org.apache.dubbo.demo.provider.MyDemoServiceImpl"/>
 
     <!-- declare the service interface to be exported -->
-    <dubbo:service interface="org.apache.dubbo.demo.DemoService" ref="demoService" connections="100" timeout="5000"/>
+    <dubbo:service interface="org.apache.dubbo.demo.DemoService" ref="demoService"  connections="100" timeout="5000"/>
+    <dubbo:service interface="org.apache.dubbo.demo.MyDemoService" ref="myDemoService"  connections="100" timeout="5000"/>
 
 </beans>
