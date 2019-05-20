@@ -285,7 +285,12 @@ public abstract class AbstractRegistry implements Registry {
         if (logger.isInfoEnabled()) {
             logger.info("Subscribe: " + url);
         }
+        //此处url即为传入的subscribeUrl
+        //consumer://192.168.1.100/org.apache.dubbo.demo.DemoService?application=demo-consumer&category=providers,configurators,routers&check=false&default.check=true&default.init=false&default.injvm=false&default.lazy=false&default.sticky=false&dubbo=2.0.2&init=false&injvm=false&interface=org.apache.dubbo.demo.DemoService&lazy=false&methods=sayHello&pid=20636&qos.port=33333&side=consumer&sticky=false&timeout=20000&timestamp=1558363679315
+        //根据subscribeUrl取出所有的监听器
         Set<NotifyListener> listeners = subscribed.computeIfAbsent(url, n -> new ConcurrentHashSet<>());
+        //把当前传入的RegistryDirectory也加入到监听器集合中
+        //RegistryDirectory实现了NotifyListener接口
         listeners.add(listener);
     }
 

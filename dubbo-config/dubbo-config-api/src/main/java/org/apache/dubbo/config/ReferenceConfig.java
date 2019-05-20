@@ -193,19 +193,25 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
      * Check each config modules are created properly and override their properties if necessary.
      */
     public void checkAndUpdateSubConfigs() {
+        // 校验接口名非空
         if (StringUtils.isEmpty(interfaceName)) {
             throw new IllegalStateException("<dubbo:reference interface=\"\" /> interface not allow null!");
         }
+
         completeCompoundConfigs();
         startConfigCenter();
+        // 拼接属性配置（环境变量 + properties 属性）到 ConsumerConfig 对象
         // get consumer's global configuration
         checkDefault();
         this.refresh();
+        // 若未设置 `generic` 属性，使用 `ConsumerConfig.generic` 属性。
         if (getGeneric() == null && getConsumer() != null) {
             setGeneric(getConsumer().getGeneric());
         }
+        // 泛化接口的实现
         if (ProtocolUtils.isGeneric(getGeneric())) {
             interfaceClass = GenericService.class;
+        // 普通接口的实现
         } else {
             try {
                 interfaceClass = Class.forName(interfaceName, true, Thread.currentThread()
@@ -213,6 +219,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException(e.getMessage(), e);
             }
+            // 校验接口和方法
             checkInterfaceAndMethods(interfaceClass, methods);
         }
         resolveFile();
@@ -221,6 +228,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
     }
 
     public synchronized T get() {
+        //开始各种check
         checkAndUpdateSubConfigs();
 
         if (destroyed) {
@@ -254,12 +262,16 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             return;
         }
         initialized = true;
+        // 校验 Stub 相关的配置
         checkStubAndLocal(interfaceClass);
+        // 校验 Mock 相关的配置
         checkMock(interfaceClass);
         Map<String, String> map = new HashMap<String, String>();
 
         map.put(Constants.SIDE_KEY, Constants.CONSUMER_SIDE);
+        // 将 `release`，`dubbo`，`timestamp`，`pid` 参数，添加到 `map` 集合中。
         appendRuntimeParameters(map);
+        //如果不是泛化引用，增加methods:interface的所有方法名，多个用逗号隔开
         if (!isGeneric()) {
             String revision = Version.getVersion(interfaceClass, version);
             if (revision != null && revision.length() > 0) {
@@ -274,7 +286,10 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 map.put("methods", StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
             }
         }
+
         map.put(Constants.INTERFACE_KEY, interfaceName);
+        // 将各种配置对象，添加到 `map` 集合中。
+        // 用Map存储application配置、module配置、默认消费者参数(ConsumerConfig)、服务消费者dubbo:reference的属性
         appendParameters(map, application);
         appendParameters(map, module);
         appendParameters(map, consumer, Constants.DEFAULT_KEY);
@@ -282,8 +297,11 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
         Map<String, Object> attributes = null;
         if (CollectionUtils.isNotEmpty(methods)) {
             attributes = new HashMap<String, Object>();
+            // 将 MethodConfig 对象数组，添加到 `map` 集合中。
             for (MethodConfig methodConfig : methods) {
+                // 将 MethodConfig 对象，添加到 `map` 集合中。
                 appendParameters(map, methodConfig, methodConfig.getName());
+                // 当 配置了 `MethodConfig.retry = false` 时，强制禁用重试
                 String retryKey = methodConfig.getName() + ".retry";
                 if (map.containsKey(retryKey)) {
                     String retryValue = map.remove(retryKey);
@@ -294,15 +312,17 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                 attributes.put(methodConfig.getName(), convertMethodConfig2AyncInfo(methodConfig));
             }
         }
-
+        // 以系统环境变量( DUBBO_IP_TO_REGISTRY ) 作为服务注册地址，参见 https://github.com/dubbo/dubbo-docker-sample 项目
         String hostToRegistry = ConfigUtils.getSystemProperty(Constants.DUBBO_IP_TO_REGISTRY);
         if (StringUtils.isEmpty(hostToRegistry)) {
             hostToRegistry = NetUtils.getLocalHost();
         }
+       // 填充register.ip属性，该属性是消息消费者连接注册中心的IP，并不是注册中心自身的IP
         map.put(Constants.REGISTER_IP_KEY, hostToRegistry);
 
+        //调用createProxy方法创建消息消费者代理
         ref = createProxy(map);
-
+        //将消息消费者缓存在ApplicationModel中
         ApplicationModel.initConsumerModel(getUniqueServiceName(), buildConsumerModel(attributes));
     }
 
@@ -389,6 +409,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
                     // use RegistryAwareCluster only when register's cluster is available
                     URL u = registryURL.addParameter(Constants.CLUSTER_KEY, RegistryAwareCluster.NAME);
                     // The invoker wrap relation would be: RegistryAwareClusterInvoker(StaticDirectory) -> FailoverClusterInvoker(RegistryDirectory, will execute route) -> Invoker
+                    //调用 Cluster#join(directory) 方法，创建 Invoker 对象。因为 cluster 是 Dubbo SPI Adaptive 类，所以可以自动获取到对应的 Cluster 实现类
                     invoker = cluster.join(new StaticDirectory(u, invokers));
                 } else { // not a registry url, must be direct invoke.
                     invoker = cluster.join(new StaticDirectory(invokers));
@@ -592,16 +613,22 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
     }
 
     private void resolveFile() {
+        // 直连提供者，参见文档《直连提供者》http://dubbo.apache.org/zh-cn/docs/user/demos/explicit-target.html
+        // 【直连提供者】第一优先级，通过 -D 参数指定 ，例如 java -Dcom.alibaba.xxx.XxxService=dubbo://localhost:20890
         String resolve = System.getProperty(interfaceName);
         String resolveFile = null;
+        // 【直连提供者】第二优先级，通过文件映射，例如 com.alibaba.xxx.XxxService=dubbo://localhost:20890
         if (StringUtils.isEmpty(resolve)) {
+            // 默认先从环境变量dubbo.resolve.file中加载
             resolveFile = System.getProperty("dubbo.resolve.file");
             if (StringUtils.isEmpty(resolveFile)) {
+                // 再加载，`${user.home}/dubbo-resolve.properties` 文件 ，无需配置
                 File userResolveFile = new File(new File(System.getProperty("user.home")), "dubbo-resolve.properties");
                 if (userResolveFile.exists()) {
                     resolveFile = userResolveFile.getAbsolutePath();
                 }
             }
+            // 存在 resolveFile ，则进行文件读取加载。
             if (resolveFile != null && resolveFile.length() > 0) {
                 Properties properties = new Properties();
                 try (FileInputStream fis = new FileInputStream(new File(resolveFile))) {
@@ -614,6 +641,7 @@ public class ReferenceConfig<T> extends AbstractReferenceConfig {
             }
         }
         if (resolve != null && resolve.length() > 0) {
+            // 设置直连提供者的 url
             url = resolve;
             if (logger.isWarnEnabled()) {
                 if (resolveFile != null) {

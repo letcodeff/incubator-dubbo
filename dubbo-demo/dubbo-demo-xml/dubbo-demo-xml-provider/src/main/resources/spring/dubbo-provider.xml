@@ -36,10 +36,10 @@
     <!--  <dubbo:protocol name="rest"/> -->
      <!-- service implementation, as same as regular local bean -->
     <bean id="demoService" class="org.apache.dubbo.demo.provider.DemoServiceImpl"/>
-    <bean id="myDemoService" class="org.apache.dubbo.demo.provider.MyDemoServiceImpl"/>
+    <!--  <bean id="myDemoService" class="org.apache.dubbo.demo.provider.MyDemoServiceImpl"/> -->
 
-    <!-- declare the service interface to be exported -->
+     <!-- declare the service interface to be exported -->
     <dubbo:service interface="org.apache.dubbo.demo.DemoService" ref="demoService"  connections="100" timeout="5000"/>
-    <dubbo:service interface="org.apache.dubbo.demo.MyDemoService" ref="myDemoService"  connections="100" timeout="5000"/>
+    <!-- <dubbo:service interface="org.apache.dubbo.demo.MyDemoService" ref="myDemoService"  connections="100" timeout="5000"/> -->
 
 </beans>

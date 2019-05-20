@@ -38,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * ZookeeperRegistry
+ * ZookeeperRegistryf
  *
  */
 public class ZookeeperRegistry extends FailbackRegistry {

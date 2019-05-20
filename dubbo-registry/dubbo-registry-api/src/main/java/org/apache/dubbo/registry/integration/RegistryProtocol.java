@@ -101,6 +101,7 @@ public class RegistryProtocol implements Protocol {
     //To solve the problem of RMI repeated exposure port conflicts, the services that have been exposed are no longer exposed.
     //providerurl <--> exporter
     private final ConcurrentMap<String, ExporterChangeableWrapper<?>> bounds = new ConcurrentHashMap<>();
+    //集群策略
     private Cluster cluster;
     private Protocol protocol;
     private RegistryFactory registryFactory;
@@ -357,22 +358,47 @@ public class RegistryProtocol implements Protocol {
         return ExtensionLoader.getExtensionLoader(Cluster.class).getExtension("mergeable");
     }
 
+    /**
+     *
+     * @param cluster 集群策略
+     * @param registry 注册中心实现类
+     * @param type 引用服务名，dubbo:reference interface。
+     * @param url 注册中心URL
+     * @param <T>
+     * @return
+     */
     private <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url) {
+        //创建 RegistryDirectory 对象。通过它，可以得到一个注册中心的所有服务提供者，即上文提到的【右边 list】
+        //构建RegistryDirectory对象，基于注册中心动态发现服务提供者（服务提供者新增或减少）
         RegistryDirectory<T> directory = new RegistryDirectory<T>(type, url);
+        //为RegistryDirectory设置注册中心
         directory.setRegistry(registry);
+       //为RegistryDirectory设置协议
         directory.setProtocol(protocol);
         // all attributes of REFER_KEY
+        //获取服务消费者的配置属性
         Map<String, String> parameters = new HashMap<String, String>(directory.getUrl().getParameters());
+        //构建消费者URL
+        // 例如：consumer://192.168.56.1/com.alibaba.dubbo.demo.DemoService?application=demo-consumer&category=consumers&check=false&dubbo=2.0.0&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello&pid=9892&qos.port=33333&side=consumer&timestamp=1528380277185
         URL subscribeUrl = new URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), 0, type.getName(), parameters);
         if (!ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true)) {
+            //向注册中心注册消费者
+            //consumer://192.168.56.1/com.alibaba.dubbo.demo.DemoService?application=demo-consumer&category=consumers&check=false&dubbo=2.0.0&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello&pid=9892&qos.port=33333&side=consumer&timestamp=1528380277185
+            //相比上边的URL，增加了category=consumers、check=false，其中category表示在注册中心的命名空间，这里代表消费端。该步骤的作用就是向注册中心为服务增加一个消息消费者
             directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));
             registry.register(directory.getRegisteredConsumerUrl());
         }
         directory.buildRouterChain(subscribeUrl);
+
+        //为消息消费者添加category=providers,configurators,routers属性后，然后向注册中心订阅该URL，
+        // 关注该服务下的providers,configurators,routers发生变化时通知RegistryDirectory，以便及时发现服务提供者、配置、路由规则的变化
+        //consumer://192.168.56.1/com.alibaba.dubbo.demo.DemoService?application=demo-consumer&category=providers,configurators,routers&check=false&dubbo=2.0.0&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello&pid=9892&qos.port=33333&side=consumer&timestamp=1528380277185
+        //其订阅关系调用的入口为：RegistryDirectory#subscribe方法，是需要重点分析的
         directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,
                 PROVIDERS_CATEGORY + "," + CONFIGURATORS_CATEGORY + "," + ROUTERS_CATEGORY));
-
+        //根据Directory，利用集群策略返回集群Invoker
         Invoker invoker = cluster.join(directory);
+       //缓存服务消费者、服务提供者对应关系
         ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);
         return invoker;
     }

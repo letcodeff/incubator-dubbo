@@ -362,6 +362,7 @@ public abstract class AbstractInterfaceConfig extends AbstractMethodConfig {
         map.put(Constants.RELEASE_KEY, Version.getVersion());
         map.put(Constants.TIMESTAMP_KEY, String.valueOf(System.currentTimeMillis()));
         if (ConfigUtils.getPid() > 0) {
+            //进程ID
             map.put(Constants.PID_KEY, String.valueOf(ConfigUtils.getPid()));
         }
     }

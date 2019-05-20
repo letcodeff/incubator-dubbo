@@ -27,6 +27,7 @@ import org.apache.dubbo.rpc.cluster.Directory;
  */
 public class FailoverCluster implements Cluster {
 
+    //failover的意思是失败重试
     public final static String NAME = "failover";
 
     @Override
