@@ -74,17 +74,25 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
 
     private static final Logger logger = LoggerFactory.getLogger(RegistryDirectory.class);
 
+    // 集群策略，默认为failover
     private static final Cluster cluster = ExtensionLoader.getExtensionLoader(Cluster.class).getAdaptiveExtension();
 
+    //路由工厂，可以通过监控中心或治理中心配置。
     private static final RouterFactory routerFactory = ExtensionLoader.getExtensionLoader(RouterFactory.class)
             .getAdaptiveExtension();
-
+    //服务key，默认为服务接口名
     private final String serviceKey; // Initialization at construction time, assertion not null
+    //服务提供者接口类，例如interface com.alibaba.dubbo.demo.DemoService
     private final Class<T> serviceType; // Initialization at construction time, assertion not null
+    //服务消费者URL中的所有属性
     private final Map<String, String> queryMap; // Initialization at construction time, assertion not null
+    //注册中心URL，只保留消息消费者URL查询属性，也就是queryMap
     private final URL directoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
+    //是否引用多个服务组
     private final boolean multiGroup;
+    //协议
     private Protocol protocol; // Initialization at the time of injection, the assertion is not null
+    //注册中心实现者
     private Registry registry; // Initialization at the time of injection, the assertion is not null
     private volatile boolean forbidden = false;
 
@@ -98,9 +106,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
      * Rule one: for a certain provider <ip:port,timeout=100>
      * Rule two: for all providers <* ,timeout=5000>
      */
+    //配置信息
     private volatile List<Configurator> configurators; // The initial value is null and the midway may be assigned to null, please use the local variable reference
 
     // Map<url, Invoker> cache service url to invoker mapping.
+    //服务URL对应的Invoker(服务提供者调用器)。
     private volatile Map<String, Invoker<T>> urlInvokerMap; // The initial value is null and the midway may be assigned to null, please use the local variable reference
     private volatile List<Invoker<T>> invokers;
 
@@ -111,6 +121,12 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     private ReferenceConfigurationListener serviceConfigurationListener;
 
 
+    /**
+     *
+     * @param serviceType 消费者引用的服务< dubbo:reference interface="" …/>
+     * @param url 注册中心的URL，例如：
+     *            zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-consumer&dubbo=2.0.0&pid=5552&qos.port=33333&refer=application%3Ddemo-consumer%26check%3Dfalse%26dubbo%3D2.0.0%26interface%3Dcom.alibaba.dubbo.demo.DemoService%26methods%3DsayHello%26pid%3D5552%26qos.port%3D33333%26register.ip%3D192.168.56.1%26side%3Dconsumer%26timestamp%3D1528379076123&timestamp=1528379076179
+     */
     public RegistryDirectory(Class<T> serviceType, URL url) {
         super(url);
         if (serviceType == null) {
@@ -120,8 +136,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
             throw new IllegalArgumentException("registry serviceKey is null.");
         }
         this.serviceType = serviceType;
+        //获取注册中心URL的serviceKey：com.alibaba.dubbo.registry.RegistryService
         this.serviceKey = url.getServiceKey();
+        //获取注册中心URL消费提供者的所有配置参数:从url属性的refer
         this.queryMap = StringUtils.parseQueryString(url.getParameterAndDecoded(Constants.REFER_KEY));
+        //初始化haulovverrideDirecotryUrl、directoryUrl：注册中心的URL，移除监控中心以及其他属性值，只保留消息消费者的配置属性
         this.overrideDirectoryUrl = this.directoryUrl = turnRegistryUrlToConsumerUrl(url);
         String group = directoryUrl.getParameter(Constants.GROUP_KEY, "");
         this.multiGroup = group != null && (Constants.ANY_VALUE.equals(group) || group.contains(","));
@@ -148,9 +167,19 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
     }
 
     public void subscribe(URL url) {
+        //设置RegistryDirectory的consumerUrl为消费者URL
         setConsumerUrl(url);
         consumerConfigurationListener.addNotifyListener(this);
         serviceConfigurationListener = new ReferenceConfigurationListener(this, url);
+        //调用注册中心订阅消息消息消费者URL，首先看一下接口Registry#subscribe的接口声明：
+        //RegistryService:void subscribe(URL url, NotifyListener listener);
+        // 这里传入的NotifyListener为RegistryDirectory，其注册中心的subscribe方法暂时不深入去跟踪，
+        // 不过根据上面URL上面的特点，应该能猜出如下实现关键点：
+        //consumer://192.168.56.1/com.alibaba.dubbo.demo.DemoService?application=demo-consumer&category=providers,configurators,routers&check=false&dubbo=2.0.0&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello&pid=9892&qos.port=33333&side=consumer&timestamp=1528380277185
+        //根据消息消费者URL，获取服务名
+        //根据category=providers、configurators、routers，分别在该服务名下的providers目录、configurators目录、
+        // routers目录建立事件监听，监听该目录下节点的创建、更新、删除事件，然后一旦事件触发，将
+        // 回调RegistryDirectory#void notify(List< URL> urls)。
         registry.subscribe(url, this);
     }
 
@@ -187,6 +216,11 @@ public class RegistryDirectory<T> extends AbstractDirectory<T> implements Notify
         }
     }
 
+    /**
+     * 首先该方法是在注册中心providers、configurators、routers目录下的节点发生变化后，
+     * 通知RegistryDirectory，已便更新最新信息，实现”动态“发现机制
+     * @param urls The list of registered information , is always not empty. The meaning is the same as the return value of {@link org.apache.dubbo.registry.RegistryService#lookup(URL)}.
+     */
     @Override
     public synchronized void notify(List<URL> urls) {
         Map<String, List<URL>> categoryUrls = urls.stream()
