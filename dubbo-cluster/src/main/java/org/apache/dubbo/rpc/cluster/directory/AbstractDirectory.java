@@ -34,7 +34,7 @@ import java.util.Map;
 
 /**
  * Abstract implementation of Directory: Invoker list returned from this Directory's list method have been filtered by Routers
- *
+ * AbstractDirectory 和它两个子类的源码。AbstractDirectory 封装了 Invoker 列举流程，具体的列举逻辑则由子类实现，这是典型的模板模式
  */
 public abstract class AbstractDirectory<T> implements Directory<T> {
 
@@ -78,7 +78,7 @@ public abstract class AbstractDirectory<T> implements Directory<T> {
         if (destroyed) {
             throw new RpcException("Directory already destroyed .url: " + getUrl());
         }
-
+        // 调用 doList 方法列举 Invoker，doList 是模板方法，由子类实现
         return doList(invocation);
     }
 

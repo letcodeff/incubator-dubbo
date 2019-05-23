@@ -167,6 +167,12 @@ public class ConditionRouter extends AbstractRouter {
             return invokers;
         }
         try {
+            // 先对服务消费者条件进行匹配，如果匹配失败，表明服务消费者 url 不符合匹配规则，
+            // 无需进行后续匹配，直接返回 Invoker 列表即可。比如下面的规则：
+            //     host = 10.20.153.10 => host = 10.0.0.10
+            // 这条路由规则希望 IP 为 10.20.153.10 的服务消费者调用 IP 为 10.0.0.10 机器上的服务。
+            // 当消费者 ip 为 10.20.153.11 时，matchWhen 返回 false，表明当前这条路由规则不适用于
+            // 当前的服务消费者，此时无需再进行后续匹配，直接返回即可。
             if (!matchWhen(url, invocation)) {
                 return invokers;
             }
