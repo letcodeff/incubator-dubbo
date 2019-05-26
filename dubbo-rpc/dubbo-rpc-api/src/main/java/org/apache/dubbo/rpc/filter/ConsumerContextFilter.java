@@ -39,21 +39,25 @@ public class ConsumerContextFilter implements Filter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // 设置 RpcContext 对象
         RpcContext.getContext()
                 .setInvoker(invoker)
                 .setInvocation(invocation)
                 .setLocalAddress(NetUtils.getLocalHost(), 0)
                 .setRemoteAddress(invoker.getUrl().getHost(),
                         invoker.getUrl().getPort());
+        // 设置 RpcInvocation 对象的 `invoker` 属性
         if (invocation instanceof RpcInvocation) {
             ((RpcInvocation) invocation).setInvoker(invoker);
         }
         try {
             // TODO should we clear server context?
             RpcContext.removeServerContext();
+            // 调用下一个的Filter的invoke方法
             return invoker.invoke(invocation);
         } finally {
             // TODO removeContext? but we need to save future for RpcContext.getFuture() API. If clear attachments here, attachments will not available when postProcessResult is invoked.
+            // 清理隐式参数集合
             RpcContext.getContext().clearAttachments();
         }
     }

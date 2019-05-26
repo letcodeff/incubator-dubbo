@@ -81,6 +81,7 @@ public class FutureFilter implements Filter {
     }
 
     private void fireInvokeCallback(final Invoker<?> invoker, final Invocation invocation) {
+
         final ConsumerMethodModel.AsyncMethodInfo asyncMethodInfo = getAsyncMethodInfo(invoker, invocation);
         if (asyncMethodInfo == null) {
             return;

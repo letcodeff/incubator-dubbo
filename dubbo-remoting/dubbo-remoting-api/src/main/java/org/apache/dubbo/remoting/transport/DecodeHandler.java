@@ -36,14 +36,15 @@ public class DecodeHandler extends AbstractChannelHandlerDelegate {
 
     @Override
     public void received(Channel channel, Object message) throws RemotingException {
+        // 对 Decodeable 接口实现类对象进行解码
         if (message instanceof Decodeable) {
             decode(message);
         }
-
+        // 对 Request 的 data 字段进行解码
         if (message instanceof Request) {
             decode(((Request) message).getData());
         }
-
+        // 对 Request 的 result 字段进行解码
         if (message instanceof Response) {
             decode(((Response) message).getResult());
         }
@@ -52,8 +53,11 @@ public class DecodeHandler extends AbstractChannelHandlerDelegate {
     }
 
     private void decode(Object message) {
+        // Decodeable 接口目前有两个实现类，
+        // 分别为 DecodeableRpcInvocation 和 DecodeableRpcResult
         if (message != null && message instanceof Decodeable) {
             try {
+                // 执行解码逻辑
                 ((Decodeable) message).decode();
                 if (log.isDebugEnabled()) {
                     log.debug("Decode decodeable message " + message.getClass().getName());

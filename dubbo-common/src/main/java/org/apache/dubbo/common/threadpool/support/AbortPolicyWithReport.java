@@ -40,12 +40,25 @@ public class AbortPolicyWithReport extends ThreadPoolExecutor.AbortPolicy {
 
     protected static final Logger logger = LoggerFactory.getLogger(AbortPolicyWithReport.class);
 
+    /**
+     * 线程名
+     */
     private final String threadName;
-
+    /**
+     * URL 对象
+     */
     private final URL url;
-
+    /**
+     * 最后打印时间
+     */
     private static volatile long lastPrintTime = 0;
-
+    /**
+     * 信号量，大小为 1 。
+     * Semaphore可以控制同时访问的线程个数，通过 acquire() 获取一个许可，如果没有就等待，而 release() 释放一个许可。
+     * 此处只有一个许可，说简单点，Semaphore维护了一个许可集合，在创建Semaphore的时候，设置上许可数，
+     * 每条线程在只有在获得一个许可的时候才可以继续往下执行逻辑（申请一个许可，则Semaphore的许可池中减少一个许可），没有获得许可的线程会进入阻塞状态
+     * 这里信号量是1，保证同一时间，有且仅有一个线程执行打印
+     */
     private static Semaphore guard = new Semaphore(1);
 
     public AbortPolicyWithReport(String threadName, URL url) {
@@ -55,6 +68,7 @@ public class AbortPolicyWithReport extends ThreadPoolExecutor.AbortPolicy {
 
     @Override
     public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        // 打印告警日志
         String msg = String.format("Thread pool is EXHAUSTED!" +
                         " Thread Name: %s, Pool Size: %d (active: %d, core: %d, max: %d, largest: %d), Task: %d (completed: %d)," +
                         " Executor status:(isShutdown:%s, isTerminated:%s, isTerminating:%s), in %s://%s:%d!",
@@ -62,7 +76,9 @@ public class AbortPolicyWithReport extends ThreadPoolExecutor.AbortPolicy {
                 e.getTaskCount(), e.getCompletedTaskCount(), e.isShutdown(), e.isTerminated(), e.isTerminating(),
                 url.getProtocol(), url.getIp(), url.getPort());
         logger.warn(msg);
+        // 打印 JStack ，分析线程状态。
         dumpJStack();
+        // 抛出 RejectedExecutionException 异常
         throw new RejectedExecutionException(msg);
     }
 
@@ -70,20 +86,25 @@ public class AbortPolicyWithReport extends ThreadPoolExecutor.AbortPolicy {
         long now = System.currentTimeMillis();
 
         //dump every 10 minutes
+        // 每 10 分钟，打印一次。
         if (now - lastPrintTime < 10 * 60 * 1000) {
             return;
         }
 
+        // 获得信号量 获得许可
+        //获得信号量。保证同一时间，有且仅有一个线程执行打印
         if (!guard.tryAcquire()) {
             return;
         }
 
+        // 创建线程池，后台执行打印 JStack
         ExecutorService pool = Executors.newSingleThreadExecutor();
         pool.execute(() -> {
+            // 获得路径
             String dumpPath = url.getParameter(Constants.DUMP_DIRECTORY, System.getProperty("user.home"));
 
             SimpleDateFormat sdf;
-
+            // 获得系统
             String os = System.getProperty("os.name").toLowerCase();
 
             // window system don't support ":" in file name
@@ -96,6 +117,7 @@ public class AbortPolicyWithReport extends ThreadPoolExecutor.AbortPolicy {
             String dateStr = sdf.format(new Date());
             //try-with-resources
             try (FileOutputStream jStackStream = new FileOutputStream(new File(dumpPath, "Dubbo_JStack.log" + "." + dateStr))) {
+                // 打印 JStack
                 JVMUtil.jstack(jStackStream);
             } catch (Throwable t) {
                 logger.error("dump jStack error", t);
