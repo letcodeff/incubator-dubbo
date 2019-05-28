@@ -89,6 +89,7 @@ public abstract class AbstractProxyInvoker<T> implements Invoker<T> {
             } else if (rpcContext.isAsyncStarted()) { // ignore obj in case of RpcContext.startAsync()? always rely on user to write back.
                 return new AsyncRpcResult(((AsyncContextImpl)(rpcContext.getAsyncContext())).getInternalFuture());
             } else {
+                // 调用 doInvoke 执行后续的调用，并将调用结果封装到 RpcResult 中
                 return new RpcResult(obj);
             }
         } catch (InvocationTargetException e) {
