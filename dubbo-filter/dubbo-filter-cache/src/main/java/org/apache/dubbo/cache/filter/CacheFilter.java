@@ -89,11 +89,15 @@ public class CacheFilter implements Filter {
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         if (cacheFactory != null && ConfigUtils.isNotEmpty(invoker.getUrl().getMethodParameter(invocation.getMethodName(), Constants.CACHE_KEY))) {
+            //作为缓存对象的key 可知不同的服务提供者，每个方法都会单独分配一个缓存对象
             Cache cache = cacheFactory.getCache(invoker.getUrl(), invocation);
             if (cache != null) {
+                //方法的参数作为key
                 String key = StringUtils.toArgumentString(invocation.getArguments());
                 Object value = cache.get(key);
                 if (value != null) {
+                    //缓存命中，直接返回,也就是说，
+                    //这里要注意，如果有多个过滤器，cache后面的过滤器不会执行
                     if (value instanceof ValueWrapper) {
                         return new RpcResult(((ValueWrapper)value).get());
                     } else {
