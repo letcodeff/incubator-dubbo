@@ -53,7 +53,13 @@ import java.util.concurrent.TimeUnit;
 
 public class RestProtocol extends AbstractProxyProtocol {
 
+    /**
+     * 服务器默认端口
+     */
     private static final int DEFAULT_PORT = 80;
+    /**
+     * 默认web服务器
+     */
     private static final String DEFAULT_SERVER = "jetty";
 
     private static final int HTTPCLIENTCONNECTIONMANAGER_MAXPERROUTE = 20;
@@ -61,14 +67,28 @@ public class RestProtocol extends AbstractProxyProtocol {
     private static final int HTTPCLIENT_KEEPALIVEDURATION = 30 * 1000;
     private static final int HTTPCLIENTCONNECTIONMANAGER_CLOSEWAITTIME_MS = 1000;
     private static final int HTTPCLIENTCONNECTIONMANAGER_CLOSEIDLETIME_S = 30;
-
+    /**
+     * 服务器集合
+     *
+     * key：ip:port
+     */
     private final Map<String, RestServer> servers = new ConcurrentHashMap<>();
 
+    /**
+     * 服务器工厂，负责创建服务器
+     */
     private final RestServerFactory serverFactory = new RestServerFactory();
 
     // TODO in the future maybe we can just use a single rest client and connection manager
+    /**
+     * 客户端数组
+     */
+    // TODO in the future maybe we can just use a single rest client and connection manager
     private final List<ResteasyClient> clients = Collections.synchronizedList(new LinkedList<>());
 
+    /**
+     * 连接监控器
+     */
     private volatile ConnectionMonitor connectionMonitor;
 
     public RestProtocol() {
@@ -86,15 +106,19 @@ public class RestProtocol extends AbstractProxyProtocol {
 
     @Override
     protected <T> Runnable doExport(T impl, Class<T> type, URL url) throws RpcException {
+        // 获得服务器地址
         String addr = getAddr(url);
+        // 获得服务的真实类名，例如 DemoServiceImpl
         Class implClass = ApplicationModel.getProviderModel(url.getServiceKey()).getServiceInstance().getClass();
+        // 获得 RestServer 对象。若不存在，进行创建。
         RestServer server = servers.computeIfAbsent(addr, restServer -> {
             RestServer s = serverFactory.createServer(url.getParameter(Constants.SERVER_KEY, DEFAULT_SERVER));
-            s.start(url);
+            s.start(url);// 启动
             return s;
         });
-
+        // 获得 ContextPath 路径。
         String contextPath = getContextPath(url);
+        // 外部的容器，需要从 ServletContext 中获得。
         if ("servlet".equalsIgnoreCase(url.getParameter(Constants.SERVER_KEY, DEFAULT_SERVER))) {
             ServletContext servletContext = ServletManager.getInstance().getServletContext(ServletManager.EXTERNAL_SERVER_PORT);
             if (servletContext == null) {
@@ -102,23 +126,27 @@ public class RestProtocol extends AbstractProxyProtocol {
                         "make sure that you've configured " + BootstrapListener.class.getName() + " in web.xml");
             }
             String webappPath = servletContext.getContextPath();
+            // 去掉 `/` 起始
             if (StringUtils.isNotEmpty(webappPath)) {
+                // 校验 URL 中配置的 `contextPath` 是外部容器的 `contextPath` 起始。
                 webappPath = webappPath.substring(1);
                 if (!contextPath.startsWith(webappPath)) {
                     throw new RpcException("Since you are using server='servlet', " +
                             "make sure that the 'contextpath' property starts with the path of external webapp");
                 }
+                // 截取掉起始部分
                 contextPath = contextPath.substring(webappPath.length());
+                // 去掉 `/` 起始
                 if (contextPath.startsWith("/")) {
                     contextPath = contextPath.substring(1);
                 }
             }
         }
-
+// 获得以 `@Path` 为注解的基础类，一般情况下，我们直接在 `implClass` 上添加了该注解，即就是 `implClass` 类。
         final Class resourceDef = GetRestful.getRootResourceClass(implClass) != null ? implClass : type;
-
+// 部署到服务器上
         server.deploy(resourceDef, impl, contextPath);
-
+// 返回取消暴露的回调 Runnable
         final RestServer s = server;
         return () -> {
             // TODO due to dubbo's current architecture,
